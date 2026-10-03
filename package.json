@@ -1,0 +1,40 @@
+{
+  "name": "opsflow",
+  "private": true,
+  "version": "1.0.0",
+  "description": "OpsFlow — Operations Work Management Platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @opsflow/api\" \"npm run dev -w @opsflow/web\"",
+    "dev:api": "npm run dev -w @opsflow/api",
+    "dev:web": "npm run dev -w @opsflow/web",
+    "build": "npm run build -w @opsflow/shared && npm run build -w @opsflow/api && npm run build -w @opsflow/web",
+    "lint": "npm run lint -w @opsflow/api && npm run lint -w @opsflow/web",
+    "typecheck": "npm run typecheck -w @opsflow/shared && npm run typecheck -w @opsflow/api && npm run typecheck -w @opsflow/web",
+    "test": "npm run test -w @opsflow/api && npm run test -w @opsflow/web",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:seed": "prisma db seed",
+    "db:reset": "prisma migrate reset --force",
+    "prisma:generate": "prisma generate",
+    "postinstall": "prisma generate"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "prisma": "^6.16.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.16.2",
+    "bcryptjs": "^2.4.3"
+  }
+}

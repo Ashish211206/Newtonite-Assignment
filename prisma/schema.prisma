@@ -1,0 +1,231 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum GlobalRole {
+  ADMIN
+  USER
+}
+
+enum TeamRole {
+  MEMBER
+  TEAM_LEAD
+  ADMIN
+}
+
+enum WorkItemType {
+  CUSTOMER_ISSUE
+  ENGINEERING
+  PAYMENT
+  INCIDENT
+  COMPLIANCE
+  OPERATIONS
+}
+
+enum WorkItemStatus {
+  OPEN
+  IN_PROGRESS
+  BLOCKED
+  WAITING_FOR_APPROVAL
+  RESOLVED
+  CLOSED
+}
+
+enum WorkItemPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AuditAction {
+  CREATED
+  UPDATED
+  ASSIGNED
+  UNASSIGNED
+  STATUS_CHANGED
+  PRIORITY_CHANGED
+  TEAM_CHANGED
+  COMMENT_ADDED
+  COMMENT_EDITED
+  COMMENT_DELETED
+  DUE_DATE_CHANGED
+  APPROVAL_REQUESTED
+  APPROVED
+  REJECTED
+  REOPENED
+  CLOSED
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  avatar       String?
+  globalRole   GlobalRole @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships     TeamMembership[]
+  reportedItems   WorkItem[]       @relation("Reporter")
+  assignedItems   WorkItem[]       @relation("Assignee")
+  comments        Comment[]
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+  idempotencyKeys IdempotencyRecord[]
+
+  @@index([email])
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships TeamMembership[]
+  workItems   WorkItem[]
+
+  @@index([name])
+}
+
+model TeamMembership {
+  id     String   @id @default(cuid())
+  userId String
+  teamId String
+  role   TeamRole @default(MEMBER)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@index([teamId])
+  @@index([userId])
+}
+
+model WorkItem {
+  id          String            @id @default(cuid())
+  number      Int               @unique @default(autoincrement())
+  title       String
+  description String            @default("")
+  status      WorkItemStatus    @default(OPEN)
+  priority    WorkItemPriority  @default(MEDIUM)
+  type        WorkItemType      @default(OPERATIONS)
+  teamId      String
+  reporterId  String
+  assigneeId  String?
+  dueDate     DateTime?
+  version     Int               @default(1)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  team      Team     @relation(fields: [teamId], references: [id])
+  reporter  User     @relation("Reporter", fields: [reporterId], references: [id])
+  assignee  User?    @relation("Assignee", fields: [assigneeId], references: [id])
+  comments  Comment[]
+  auditLogs AuditLog[]
+  notifications Notification[]
+
+  @@index([teamId, status])
+  @@index([assigneeId, status])
+  @@index([priority, status])
+  @@index([type])
+  @@index([dueDate])
+  @@index([updatedAt])
+  @@index([title])
+  @@index([status, priority, dueDate])
+}
+
+model Comment {
+  id         String   @id @default(cuid())
+  workItemId String
+  authorId   String
+  body       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  workItem WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  author   User     @relation(fields: [authorId], references: [id])
+
+  @@index([workItemId, createdAt])
+  @@index([authorId])
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  workItemId String
+  actorId    String
+  action     AuditAction
+  entityType String      @default("WorkItem")
+  metadata   Json        @default("{}")
+  createdAt  DateTime    @default(now())
+
+  workItem WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  actor    User     @relation(fields: [actorId], references: [id])
+
+  @@index([workItemId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+}
+
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String
+  type       String
+  title      String
+  message    String
+  workItemId String?
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+  sourceEventId String? @unique
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workItem WorkItem? @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@index([createdAt])
+}
+
+model OutboxEvent {
+  id          String       @id @default(cuid())
+  type        String
+  payload     Json
+  status      OutboxStatus @default(PENDING)
+  attempts    Int          @default(0)
+  availableAt DateTime     @default(now())
+  processedAt DateTime?
+  lastError   String?
+  createdAt   DateTime     @default(now())
+
+  @@index([status, availableAt])
+}
+
+model IdempotencyRecord {
+  id             String   @id @default(cuid())
+  key            String
+  userId         String
+  route          String
+  requestHash    String
+  responseStatus Int
+  responseBody   Json
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([createdAt])
+}
